@@ -1,0 +1,227 @@
+"""
+build_data.py
+=============
+Builds the data files the website reads. Uses only the Python standard library.
+
+    python3 build_data.py            # geography (once) + NOAA snapshots
+    python3 build_data.py --noaa     # refresh NOAA snapshots only (e.g. demo morning)
+
+Outputs
+    data/gbr.js        Great Barrier Reef Marine Park boundary + 2,700+ reef outlines
+                       (GBRMPA open data), with each reef's centre and zone
+    data/snapshots.js  NOAA Coral Reef Watch 5 km daily data for the study area,
+                       clipped to the Marine Park, for the latest day + key events
+
+Sources
+    NOAA Coral Reef Watch v3.1 via PacIOOS ERDDAP (dataset dhw_5km)
+    GBRMPA open data: Marine Park Boundary, Great Barrier Reef Features
+"""
+
+import http.client
+import json
+import os
+import sys
+import urllib.parse
+import urllib.request
+import time
+
+# ── Study area: northern + central GBR ─────────────────────────────
+NORTH_LIMIT = -10.4   # tip of Cape York
+SOUTH_LIMIT = -21.0   # southern edge of the central GBR
+ZONE_SPLIT = -16.5    # northern / central boundary (approximate)
+WEST, EAST = 142.3, 152.9
+
+ERDDAP = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json"
+GBRMPA = "https://services-ap1.arcgis.com/8gXWSCxaJlFIfiTr/arcgis/rest/services"
+BOUNDARY_URL = GBRMPA + "/Great_Barrier_Reef_Marine_Park_Boundary_20/FeatureServer/63/query"
+REEFS_URL = GBRMPA + "/Great_Barrier_Reef_Features_20/FeatureServer/64/query"
+
+VARIABLES = {
+    "baa":     ("CRW_BAA", 0),
+    "dhw":     ("CRW_DHW", 2),
+    "ssta":    ("CRW_SSTANOMALY", 2),
+    "sst":     ("CRW_SST", 2),
+    "hotspot": ("CRW_HOTSPOT", 2),
+}
+
+# Peak alert day (northern + central reef) of recent bleaching summers
+EVENTS = ["2025-03-09", "2024-03-03", "2022-03-12", "2020-03-08", "2017-03-21", "2016-03-23"]
+
+
+def get_json(url, params=None):
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    with urllib.request.urlopen(url, timeout=300) as r:
+        return json.load(r)
+
+
+# ── Geometry helpers ───────────────────────────────────────────────
+def point_in_ring(lat, lon, ring):
+    """Ray casting; ring is a list of [lon, lat]."""
+    inside = False
+    j = len(ring) - 1
+    for i in range(len(ring)):
+        xi, yi = ring[i]
+        xj, yj = ring[j]
+        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def ring_centre(ring):
+    """Area-weighted centroid of a ring of [lon, lat]."""
+    a = cx = cy = 0.0
+    for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+        f = x0 * y1 - x1 * y0
+        a += f
+        cx += (x0 + x1) * f
+        cy += (y0 + y1) * f
+    if abs(a) < 1e-12:
+        xs, ys = zip(*ring)
+        return sum(ys) / len(ys), sum(xs) / len(xs)
+    return cy / (3 * a), cx / (3 * a)
+
+
+# ── GBRMPA geography ───────────────────────────────────────────────
+def build_geography():
+    print("Downloading Marine Park boundary ...")
+    b = get_json(BOUNDARY_URL, {
+        "where": "1=1", "outSR": 4326, "maxAllowableOffset": 0.01,
+        "geometryPrecision": 3, "f": "geojson",
+    })
+    boundary = b["features"][0]["geometry"]["coordinates"][0]  # [lon, lat]
+
+    print("Downloading reef outlines ...")
+    reefs = []
+    offset = 0
+    while True:
+        page = get_json(REEFS_URL, {
+            "where": f"FEAT_NAME='Reef' AND Y_COORD>{SOUTH_LIMIT} AND Y_COORD<{NORTH_LIMIT}",
+            "outFields": "GBR_NAME", "outSR": 4326, "maxAllowableOffset": 0.004,
+            "geometryPrecision": 3, "resultOffset": offset, "resultRecordCount": 2000,
+            "f": "geojson",
+        })
+        feats = page.get("features", [])
+        for f in feats:
+            g = f["geometry"]
+            if not g:
+                continue
+            polys = [g["coordinates"]] if g["type"] == "Polygon" else g["coordinates"]
+            rings = [p[0] for p in polys if len(p[0]) >= 4]
+            if not rings:
+                continue
+            biggest = max(rings, key=len)
+            lat, lon = ring_centre(biggest)
+            name = (f["properties"].get("GBR_NAME") or "Unnamed reef").strip()
+            if name.upper().startswith("U/N"):
+                name = "Unnamed reef"
+            reefs.append({
+                "n": name,
+                "c": [round(lat, 3), round(lon, 3)],
+                "z": "N" if lat >= ZONE_SPLIT else "C",
+                # rings as flat [lat, lon, lat, lon, ...] to keep the file small
+                "r": [[v for lo, la in ring for v in (la, lo)] for ring in rings],
+            })
+        print(f"  {offset + len(feats)} reefs")
+        if len(feats) < 2000:
+            break
+        offset += 2000
+
+    geo = {
+        "boundary": [[la, lo] for lo, la in boundary],
+        "study": {"north": NORTH_LIMIT, "south": SOUTH_LIMIT, "split": ZONE_SPLIT,
+                  "west": WEST, "east": EAST},
+        "reefs": reefs,
+    }
+    with open("data/gbr.js", "w") as f:
+        f.write("// Generated by build_data.py - GBRMPA open data (CC BY 4.0)\n")
+        f.write("window.GBR = ")
+        json.dump(geo, f, separators=(",", ":"))
+        f.write(";\n")
+    print(f"Saved data/gbr.js ({len(reefs)} reefs)")
+    return geo
+
+
+def load_geography():
+    with open("data/gbr.js") as f:
+        text = f.read()
+    return json.loads(text[text.index("=") + 1:].strip().rstrip(";"))
+
+
+# ── NOAA snapshots ─────────────────────────────────────────────────
+def fetch_day(date, mask_cache):
+    t = "(last)" if date == "latest" else f"({date})"
+    dims = f"[{t}][({NORTH_LIMIT}):1:({SOUTH_LIMIT})][({WEST}):1:({EAST})]"
+    query = ",".join(var + dims for var, _ in VARIABLES.values())
+    url = ERDDAP + "?" + urllib.parse.quote(query, safe="(),:")
+
+    # Past days never change, so keep a local copy; NOAA's server sometimes drops connections
+    cache_file = os.path.join("data", "cache", f"{date}.json")
+    if date != "latest" and os.path.exists(cache_file):
+        print(f"Using cached {date} ...", end=" ", flush=True)
+        with open(cache_file) as f:
+            table = json.load(f)
+    else:
+        for attempt in range(1, 4):
+            print(f"Fetching {date}{f' (retry {attempt - 1})' if attempt > 1 else ''} ...", end=" ", flush=True)
+            try:
+                with urllib.request.urlopen(url, timeout=600) as r:
+                    table = json.load(r)["table"]
+                break
+            except (OSError, ValueError, http.client.HTTPException) as e:
+                print(f"failed ({type(e).__name__})")
+                if attempt == 3:
+                    raise
+                time.sleep(5 * attempt)
+        if date != "latest":
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, "w") as f:
+                json.dump(table, f)
+    cols, rows = table["columnNames"], table["rows"]
+    lats = sorted({row[1] for row in rows}, reverse=True)
+    lons = sorted({row[2] for row in rows})
+
+    key = (len(lats), len(lons))
+    if key not in mask_cache:
+        ring = [[lo, la] for la, lo in mask_cache["boundary"]]
+        mask_cache[key] = [point_in_ring(row[1], row[2], ring) for row in rows]
+    inside = mask_cache[key]
+
+    grid = {"date": rows[0][0][:10], "lats": lats, "lons": lons,
+            "step": round(abs(lats[1] - lats[0]), 4), "vars": {}}
+    for k, (var, digits) in VARIABLES.items():
+        i = cols.index(var)
+        vals = []
+        for row, ok in zip(rows, inside):
+            v = row[i]
+            if not ok or v is None:
+                vals.append(None)
+            else:
+                vals.append(int(v) if digits == 0 else round(v, digits))
+        grid["vars"][k] = vals
+    print(f"ok ({grid['date']}, {sum(inside)} reef-park cells)")
+    return grid
+
+
+def build_snapshots(geo):
+    cache = {"boundary": geo["boundary"]}
+    snaps, latest = {}, None
+    for d in ["latest"] + EVENTS + sys.argv[2:]:
+        g = fetch_day(d, cache)
+        snaps[g["date"]] = g
+        if d == "latest":
+            latest = g["date"]
+    with open("data/snapshots.js", "w") as f:
+        f.write("// Generated by build_data.py - NOAA Coral Reef Watch 5 km daily v3.1\n")
+        f.write(f"window.SNAPSHOT_LATEST = {json.dumps(latest)};\n")
+        f.write("window.SNAPSHOTS = ")
+        json.dump(snaps, f, separators=(",", ":"))
+        f.write(";\n")
+    print(f"Saved data/snapshots.js ({len(snaps)} days, latest = {latest})")
+
+
+if __name__ == "__main__":
+    only_noaa = len(sys.argv) > 1 and sys.argv[1] == "--noaa"
+    geo = load_geography() if only_noaa else build_geography()
+    build_snapshots(geo)

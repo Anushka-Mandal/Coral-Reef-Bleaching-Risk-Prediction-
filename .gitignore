@@ -17,3 +17,11 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+# Website download cache
+website/data/cache/
+
+# Python env, secrets, large data and caches
+.venv/
+.env
+forecast/data/
+backend/data/cache/
