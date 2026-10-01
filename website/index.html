@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoralWatch · Coral Bleaching Risk</title>
+  <meta name="description" content="Forecasting coral bleaching heat stress on the northern and central Great Barrier Reef with satellite data, deep learning and reef reports.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M16 29c0-6 0-9-3-12s-7-3-7-8m10 20c0-7 1-10 4-13s6-4 6-9M16 29V13%22 fill=%22none%22 stroke=%22%235eead4%22 stroke-width=%223%22 stroke-linecap=%22round%22/%3E%3C/svg%3E">
+</head>
+<body>
+
+  <!-- ── Navigation ─────────────────────────────────────── -->
+  <nav class="nav" id="nav">
+    <a class="brand" href="#top">
+      <svg class="brand-icon" viewBox="0 0 32 32" aria-hidden="true">
+        <defs><linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>
+        <path d="M16 29c0-6 0-9-3-12s-7-3-7-8m10 20c0-7 1-10 4-13s6-4 6-9M16 29V13m0 0c-2-2-2-5-1-8m1 8c2-2 3-4 3-7" fill="none" stroke="url(#bg-grad)" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+      <span>Coral<b>Watch</b></span>
+    </a>
+    <div class="nav-links">
+      <a href="#about">About</a>
+      <a href="#how">How it works</a>
+      <a href="#map">Live map</a>
+      <a href="#dataset">Data</a>
+      <a href="#roadmap">Roadmap</a>
+    </div>
+    <a class="btn btn-small" href="#map">Open live map</a>
+  </nav>
+
+  <!-- ── Hero ───────────────────────────────────────────── -->
+  <header class="hero" id="top">
+    <canvas id="plankton" aria-hidden="true"></canvas>
+    <div class="aurora" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <div class="hero-copy reveal">
+        <span class="eyebrow"><span class="pulse"></span>Northern &amp; Central Great Barrier Reef</span>
+        <h1>Seeing coral bleaching <span class="glow-text">before it strikes</span></h1>
+        <p class="lead">CoralWatch combines eight years of daily satellite ocean-heat maps with deep learning to forecast bleaching risk across the northern and central Great Barrier Reef, and explains that risk in plain language.</p>
+        <div class="cta-row">
+          <a class="btn" href="#map">Explore the live map <span aria-hidden="true">→</span></a>
+          <a class="btn btn-ghost" href="#how">How it works</a>
+        </div>
+        <p class="status-line">Reef status today: <span id="hero-status">loading…</span></p>
+      </div>
+      <figure class="hero-visual reveal">
+        <svg id="hero-map" role="img" aria-label="Map of reefs in the northern and central Great Barrier Reef, coloured by bleaching alert level during the March 2024 heatwave"></svg>
+        <figcaption>
+          <span id="hero-caption">Every reef in our study area, coloured by NOAA bleaching alert level during the March 2024 marine heatwave.</span>
+          <span class="mini-legend" id="hero-legend"></span>
+        </figcaption>
+      </figure>
+    </div>
+    <a class="scroll-cue" href="#stats" aria-label="Scroll down"><span></span></a>
+  </header>
+
+  <!-- ── Key numbers ────────────────────────────────────── -->
+  <section class="stats" id="stats">
+    <div class="stat reveal"><span class="stat-num" id="stat-reefs">2,700+</span><span class="stat-label">reefs monitored in the study area</span></div>
+    <div class="stat reveal"><span class="stat-num">8 yrs</span><span class="stat-label">of daily satellite data (2018–2025)</span></div>
+    <div class="stat reveal"><span class="stat-num">4</span><span class="stat-label">ocean-heat channels per day</span></div>
+    <div class="stat reveal"><span class="stat-num">7 days</span><span class="stat-label">forecast horizon</span></div>
+  </section>
+
+  <!-- ── Why it matters ─────────────────────────────────── -->
+  <section class="section" id="about">
+    <div class="section-head reveal">
+      <span class="kicker">Why it matters</span>
+      <h2>The reef is running out of time to recover</h2>
+      <p>When the sea stays too warm for too long, corals expel the algae that feed and colour them. They turn white and, if the heat lasts, they starve. Early warning gives reef managers time to act.</p>
+    </div>
+    <div class="cards-3">
+      <article class="card glow-card reveal">
+        <div class="card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v10m0 0a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm3-6h3m-3 3h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Heat stress builds up</h3>
+        <p>Bleaching follows <em>accumulated</em> heat, not a single hot day. NOAA tracks this as Degree Heating Weeks: above 4, significant bleaching is likely; above 8, severe bleaching and coral death are likely.</p>
+      </article>
+      <article class="card glow-card reveal">
+        <div class="card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 18h16M6 18V9m4 9V6m4 12v-8m4 8V4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <h3>It keeps happening</h3>
+        <p>Mass bleaching has struck the Great Barrier Reef again and again, with less time to recover between events.</p>
+        <div class="years">
+          <span>2016</span><span>2017</span><span>2020</span><span>2022</span><span>2024</span>
+        </div>
+      </article>
+      <article class="card glow-card reveal">
+        <div class="card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="9.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        </div>
+        <h3>Why the north &amp; centre</h3>
+        <p>The northern and central reef took the heaviest damage in the back-to-back 2016 and 2017 events. Much of it is remote, so satellites are often the first to see trouble.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ── Alert levels ───────────────────────────────────── -->
+  <section class="section" id="levels">
+    <div class="section-head reveal">
+      <span class="kicker">What we predict</span>
+      <h2>Five levels of bleaching risk</h2>
+      <p>We use NOAA Coral Reef Watch's Bleaching Alert Area scale, the standard used by reef managers worldwide. Our model forecasts the highest level each reef area will reach over the coming week, up to 14 days ahead.</p>
+    </div>
+    <div class="levels" id="levels-list"></div>
+  </section>
+
+  <!-- ── How it works ───────────────────────────────────── -->
+  <section class="section" id="how">
+    <div class="section-head reveal">
+      <span class="kicker">How it works</span>
+      <h2>From satellite pixels to plain-language risk</h2>
+    </div>
+    <ol class="pipeline">
+      <li class="step reveal">
+        <span class="step-num">01</span>
+        <h3>Satellite ocean data</h3>
+        <p>Daily 5&nbsp;km maps from NOAA Coral Reef Watch: sea surface temperature, temperature anomaly, HotSpot and Degree Heating Weeks.</p>
+        <span class="badge badge-done">Built</span>
+      </li>
+      <li class="step reveal">
+        <span class="step-num">02</span>
+        <h3>Deep learning forecast</h3>
+        <p>A CNN-ConvLSTM reads four weeks of ocean data plus the weather forecast, predicts HotSpot for the next 14 days, and a built-in NOAA formula turns that into DHW and NOAA's 7-day maximum alert for every reef cell.</p>
+        <span class="badge badge-done">Built</span>
+      </li>
+      <li class="step reveal">
+        <span class="step-num">03</span>
+        <h3>Reef report knowledge</h3>
+        <p>AIMS, Marine Monitoring Program and Reef Authority reports are split into 3,180 searchable passages; the most relevant ones published before the chosen date are retrieved for each briefing.</p>
+        <span class="badge badge-done">Built</span>
+      </li>
+      <li class="step reveal">
+        <span class="step-num">04</span>
+        <h3>LLM explanation</h3>
+        <p>A large language model combines the forecast, today's numbers and the retrieved report passages into a cited, plain-language explanation.</p>
+        <span class="badge badge-done">Built</span>
+      </li>
+    </ol>
+
+    <div class="arch card reveal" aria-label="Model architecture">
+      <div class="arch-block">
+        <div class="frames" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <b>4 weeks</b><span>ocean data + weather forecast</span>
+      </div>
+      <span class="arch-arrow" aria-hidden="true"></span>
+      <div class="arch-block"><div class="arch-chip">CNN</div><b>Spatial features</b><span>shared encoder for each day</span></div>
+      <span class="arch-arrow" aria-hidden="true"></span>
+      <div class="arch-block"><div class="arch-chip">ConvLSTM</div><b>Temporal pattern</b><span>memory of how heat builds</span></div>
+      <span class="arch-arrow" aria-hidden="true"></span>
+      <div class="arch-block"><div class="arch-chip">DHW formula</div><b>NOAA physics</b><span>HotSpot → DHW, exactly</span></div>
+      <span class="arch-arrow" aria-hidden="true"></span>
+      <div class="arch-block"><div class="arch-chip chip-hot">Alert</div><b>1–14 days ahead</b><span>for all 1,927 reef cells</span></div>
+    </div>
+
+    <div class="results reveal">
+      <div class="result-card"><span class="result-num">82.4%</span><span class="result-label">accurate 7 days ahead on unseen 2024–25 seasons</span><span class="result-cmp">vs 68.7% for "no change" · 95% within one level</span></div>
+      <div class="result-card"><span class="result-num">76.9%</span><span class="result-label">with the real weather forecasts of the time, in peak season</span><span class="result-cmp">vs 63.8% for "no change" (p &lt; 0.001)</span></div>
+      <div class="result-card"><span class="result-num">97% → 77%</span><span class="result-label">accuracy from 1 day to 14 days ahead</span><span class="result-cmp">beats "no change" at every lead time</span></div>
+      <p class="hint results-note">Target: NOAA's official 7-day maximum alert for 1,927 reef cells. Trained on 2018–2021, chosen on 2022–2023, tested once on 2024–2025, with 95% confidence intervals. Full tables: <code>forecast/results/v2_max7/RESULTS.md</code>.</p>
+    </div>
+  </section>
+
+  <!-- ── Live map ───────────────────────────────────────── -->
+  <section class="map-section" id="map">
+    <div class="section-head reveal">
+      <span class="kicker">Live map</span>
+      <h2>Heat stress across the reef, today and in past events</h2>
+      <p>Real NOAA satellite data clipped to the Great Barrier Reef Marine Park, updated daily. Switch to the <b>7-day forecast</b> layer to see what the model expects next week; hover over the reef for values.</p>
+    </div>
+
+    <div class="dashboard reveal">
+      <div class="map-frame">
+        <div id="leaflet-map"></div>
+        <div class="map-loading" id="map-loading" hidden><span class="spinner"></span>Fetching live data from NOAA…</div>
+        <div class="map-legend glass" id="map-legend"></div>
+      </div>
+
+      <aside class="controls">
+        <div class="glass panel-block">
+          <span class="label">Data source</span>
+          <p class="source-line" id="source-line">–</p>
+        </div>
+
+        <div class="glass panel-block">
+          <label class="label" for="layer-select">Layer</label>
+          <select id="layer-select"></select>
+          <p class="hint" id="layer-desc"></p>
+        </div>
+
+        <div class="glass panel-block">
+          <span class="label">Date</span>
+          <div class="chips" id="date-chips"></div>
+          <form class="date-row" id="date-form">
+            <input type="date" id="date-input" min="1985-04-01" aria-label="Choose any date">
+            <button class="btn btn-small" type="submit">Load</button>
+          </form>
+          <p class="hint" id="date-msg">Any date since April 1985 loads live from NOAA.</p>
+        </div>
+
+        <div class="zone-grid" id="zones"></div>
+
+        <div class="glass panel-block">
+          <span class="label">Situation summary</span>
+          <p class="summary" id="summary"></p>
+          <p class="hint">Quick rule-based summary. Use the AI briefing below for a full explanation.</p>
+        </div>
+      </aside>
+    </div>
+
+    <div class="ai-panel glass reveal" id="ai-panel">
+      <div class="ai-top">
+        <div>
+          <span class="kicker">AI reef briefing</span>
+          <h3>Ask what's happening, and why</h3>
+          <p class="hint" id="ai-intro">An LLM reads the live numbers, the 7-day forecast and passages from AIMS, Marine Monitoring Program and Reef Authority reports, then explains the risk with citations.</p>
+        </div>
+        <span class="ai-badge" id="ai-mode">Checking…</span>
+      </div>
+      <div class="ai-controls">
+        <div class="seg" role="radiogroup" aria-label="Zone">
+          <button type="button" class="seg-btn" data-zone="N" aria-pressed="true">Northern GBR</button>
+          <button type="button" class="seg-btn" data-zone="C" aria-pressed="false">Central GBR</button>
+        </div>
+        <button type="button" class="btn btn-small" id="explain-btn">Explain this date</button>
+        <form class="ask-form" id="ask-form">
+          <input id="ask-input" maxlength="500" placeholder="Ask a question, e.g. How does this compare with 2016?" aria-label="Ask a question">
+          <button type="submit" class="btn btn-small btn-ghost">Ask</button>
+        </form>
+      </div>
+      <div class="ai-body">
+        <div class="ai-output" id="ai-output" aria-live="polite">
+          <p class="ai-placeholder">Pick a date on the map, choose a zone, then press <b>Explain this date</b>.</p>
+        </div>
+        <aside class="ai-sources-wrap">
+          <span class="label">Sources used</span>
+          <ol class="ai-sources" id="ai-sources"><li class="muted-item">Sources appear here after a briefing.</li></ol>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Dataset ────────────────────────────────────────── -->
+  <section class="section" id="dataset">
+    <div class="section-head reveal">
+      <span class="kicker">Our data</span>
+      <h2>Eight years of reef heat stress, day by day</h2>
+      <p>Each day from 2018 to 2025 is labelled with NOAA's Bleaching Alert level. The forecast model learns from 2018–2021, is tuned on 2022–2023 and is tested once on 2024–2025.</p>
+    </div>
+    <div class="card chart-card reveal">
+      <div class="chart-head">
+        <h3>Days at each alert level, per year</h3>
+        <div class="legend-row" id="chart-legend"></div>
+      </div>
+      <div class="chart" id="year-chart" role="img" aria-label="Stacked bar chart of days per alert level for each year 2018 to 2025"></div>
+      <details class="table-toggle">
+        <summary>Show as table</summary>
+        <div id="year-table"></div>
+      </details>
+    </div>
+    <div class="cards-3 sources">
+      <article class="card reveal">
+        <span class="source-tag">Satellite</span>
+        <h3>NOAA Coral Reef Watch</h3>
+        <p>5&nbsp;km daily SST, SST anomaly, HotSpot, Degree Heating Weeks and Bleaching Alert Area, v3.1.</p>
+      </article>
+      <article class="card reveal">
+        <span class="source-tag">Text</span>
+        <h3>Reef reports</h3>
+        <p>AIMS annual summaries, Marine Monitoring Program water-quality reports and Reef Snapshot updates.</p>
+      </article>
+      <article class="card reveal">
+        <span class="source-tag">Geography</span>
+        <h3>GBRMPA open data</h3>
+        <p>Official Marine Park boundary and outlines of every reef, used to clip the map to the reef itself.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ── Roadmap ────────────────────────────────────────── -->
+  <section class="section" id="roadmap">
+    <div class="section-head reveal">
+      <span class="kicker">Roadmap</span>
+      <h2>Where the project is heading</h2>
+    </div>
+    <ol class="timeline">
+      <li class="reveal done"><b>Satellite data pipeline</b><span>NOAA downloads, cropping and 4-channel daily stacks, 2018–2025.</span></li>
+      <li class="reveal done"><b>Forecast models</b><span>CNN-LSTM, CNN-GRU and ConvLSTM compared, with dropout and early-stopping variants.</span></li>
+      <li class="reveal done"><b>Report embeddings</b><span>AIMS, MMP and Reef Snapshot reports indexed with BGE-large; fusion with the CNN evaluated.</span></li>
+      <li class="reveal done"><b>Live reef map</b><span>Real NOAA data clipped to the Marine Park, with reef-level statistics.</span></li>
+      <li class="reveal done"><b>Corrected forecast pipeline</b><span>Raw NOAA values, calendar-aware sequences, season-based train / validation / test split, and baselines to beat.</span></li>
+      <li class="reveal done"><b>Forecast on the map</b><span>The chosen model's 7-day-ahead alert level for every reef cell, run on live NOAA data.</span></li>
+      <li class="reveal done"><b>LLM explanations</b><span>Streamed, cited briefings and Q&amp;A grounded in the live numbers, the forecast and the reef reports.</span></li>
+      <li class="reveal done"><b>Physics-guided 14-day forecast</b><span>NOAA's DHW formula built into the network, weather forecasts as input, tested with real archived forecasts.</span></li>
+      <li class="reveal next"><b>More reef regions</b><span>Extend to the southern GBR and other reef systems, and compare with NOAA's operational outlook.</span></li>
+    </ol>
+  </section>
+
+  <footer class="footer">
+    <div>
+      <a class="brand" href="#top"><span>Coral<b>Watch</b></span></a>
+      <p>Coral Reef Bleaching Risk Prediction using Satellite Alerts and NLP on Observational Reports. Capstone project, Department of Computer Science &amp; Engineering.</p>
+    </div>
+    <p class="credits">Data: NOAA Coral Reef Watch (via PacIOOS ERDDAP) · Geography © Commonwealth of Australia (GBRMPA), CC BY 4.0 · Map tiles © Esri</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="data/gbr.js"></script>
+  <script src="data/snapshots.js"></script>
+  <script src="app.js"></script>
+  <script src="landing.js"></script>
+</body>
+</html>
